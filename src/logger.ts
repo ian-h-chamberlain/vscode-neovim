@@ -1,6 +1,7 @@
 import fs from "fs";
 
-import { Disposable, window } from "vscode";
+import { Disposable, LogOutputChannel, window } from "vscode";
+import { EXT_NAME } from "./utils";
 
 export enum LogLevel {
     none = 0,
@@ -14,6 +15,8 @@ export class Logger implements Disposable {
 
     private fd = 0;
 
+    private outputChannel?: LogOutputChannel;
+
     public constructor(
         private logLevel: LogLevel,
         filePath: string,
@@ -25,9 +28,9 @@ export class Logger implements Disposable {
             } catch {
                 // ignore
             }
+            this.outputChannel = window.createOutputChannel(`${EXT_NAME} logs`, { log: true });
+            this.disposables.push(this.outputChannel);
         }
-        // this.channel = window.createOutputChannel(EXT_NAME);
-        // this.disposables.push(this.channel);
     }
 
     public dispose(): void {
@@ -38,10 +41,13 @@ export class Logger implements Disposable {
     }
 
     public debug(msg: string): void {
-        msg = `${this.getTimestamp()} ${msg}`;
+        msg = `${this.getTimestamp()} DEBUG ${msg}`;
         if (this.logLevel >= LogLevel.debug) {
             if (this.fd) {
                 fs.appendFileSync(this.fd, msg + "\n");
+            }
+            if (this.outputChannel) {
+                this.outputChannel.appendLine(msg);
             }
             if (this.outputToConsole) {
                 console.log(msg);
@@ -50,10 +56,13 @@ export class Logger implements Disposable {
     }
 
     public warn(msg: string): void {
-        msg = `${this.getTimestamp()} ${msg}`;
+        msg = `${this.getTimestamp()} WARN  ${msg}`;
         if (this.logLevel >= LogLevel.warn) {
             if (this.fd) {
                 fs.appendFileSync(this.fd, msg + "\n");
+            }
+            if (this.outputChannel) {
+                this.outputChannel.appendLine(msg);
             }
             if (this.outputToConsole) {
                 console.log(msg);
@@ -62,13 +71,16 @@ export class Logger implements Disposable {
     }
 
     public error(msg: string): void {
-        msg = `${this.getTimestamp()} ${msg}`;
+        const logMsg = `${this.getTimestamp()} ERROR ${msg}`;
         if (this.logLevel >= LogLevel.error) {
             if (this.fd) {
-                fs.appendFileSync(this.fd, msg + "\n");
+                fs.appendFileSync(this.fd, logMsg + "\n");
+            }
+            if (this.outputChannel) {
+                this.outputChannel.appendLine(logMsg);
             }
             if (this.outputToConsole) {
-                console.log(msg);
+                console.log(logMsg);
             }
         }
         window.showErrorMessage(msg);

@@ -81,11 +81,11 @@ export class MainController implements vscode.Disposable {
 
     public constructor(settings: ControllerSettings) {
         this.settings = settings;
-        this.logger = new Logger(
-            LogLevel[settings.logConf.level],
-            settings.logConf.logPath,
-            settings.logConf.outputToConsole,
-        );
+
+        const logLevel = process.env.NODE_ENV === "test" ? LogLevel.debug : LogLevel[settings.logConf.level];
+        const outputToConsole = settings.logConf.outputToConsole || process.env.NODE_ENV === "test";
+
+        this.logger = new Logger(logLevel, settings.logConf.logPath, outputToConsole);
         this.disposables.push(this.logger);
 
         let extensionPath = settings.extensionPath;
