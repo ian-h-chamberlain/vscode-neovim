@@ -568,20 +568,17 @@ export class BufferManager implements Disposable {
                 this.isLayoutOutdated = false;
                 const token = this.syncLayoutSource?.token;
 
-                const visibleEditors = [...window.visibleTextEditors];
-                const activeEditor = window.activeTextEditor;
-
                 if (token?.isCancellationRequested) continue;
                 this.syncLayoutProgress.report("Cleaning up windows and buffers");
-                await this.cleanupWindowsAndBuffers(visibleEditors);
+                await this.cleanupWindowsAndBuffers(window.visibleTextEditors, workspace.textDocuments);
 
                 if (token?.isCancellationRequested) continue;
                 this.syncLayoutProgress.report("Syncing visible editors");
-                await this.syncVisibleEditors(visibleEditors);
+                await this.syncVisibleEditors(window.visibleTextEditors);
 
                 if (token?.isCancellationRequested) continue;
                 this.syncLayoutProgress.report("Syncing active editor");
-                await this.syncActiveEditor(activeEditor);
+                await this.syncActiveEditor(window.activeTextEditor);
             }
         } catch (e) {
             logger.error("Error syncing layout:", e);
@@ -595,30 +592,62 @@ export class BufferManager implements Disposable {
 
     private syncEditorLayoutDebounced = debounce(this.syncEditorLayout, 100, { leading: false, trailing: true });
 
-    private async cleanupWindowsAndBuffers(visibleEditors: TextEditor[]): Promise<void> {
-        const unusedWindows: number[] = [];
-        const unusedBuffers: number[] = [];
+    private async cleanupWindowsAndBuffers(
+        visibleEditors: readonly TextEditor[],
+        openDocuments: readonly TextDocument[],
+    ): Promise<void> {
         // close windows
-        [...this.textEditorToWinId.entries()].forEach(([editor, winId]) => {
-            if (visibleEditors.includes(editor)) return;
+        const unusedEditors: Map<TextEditor, number> = new Map();
+
+        for (const [editor, winId] of this.textEditorToWinId) {
+            if (visibleEditors.includes(editor)) continue;
+
             logger.debug(`Editor viewColumn: ${editor.viewColumn}, winId: ${winId}, closing`);
+            let isWinValid = true;
+            try {
+                await this.client.request("nvim_win_close", [winId, true]);
+                isWinValid = await this.client.request("nvim_win_is_valid", [winId]);
+            } catch (err) {
+                logger.warn(`Failed to close window ${winId}: ${err}`);
+            }
+
+            if (!isWinValid) {
+                unusedEditors.set(editor, winId);
+            }
+        }
+
+        for (const [editor, winId] of unusedEditors) {
             this.textEditorToWinId.delete(editor);
             this.winIdToEditor.delete(winId);
-            unusedWindows.push(winId);
-        });
+        }
+
         // delete buffers
-        [...this.textDocumentToBufferId.entries()].forEach(([document, bufId]) => {
-            if (!document.isClosed) return;
-            if (visibleEditors.some((editor) => editor.document === document)) return;
+        const unusedDocuments: TextDocument[] = [];
+
+        for (const [document, bufId] of this.textDocumentToBufferId) {
+            if (!document.isClosed) continue;
+            if (openDocuments.includes(document)) continue;
+            if (visibleEditors.some((editor) => editor.document === document)) continue;
+
             logger.debug(`Document: ${document.uri}, bufId: ${bufId}, deleting`);
-            this.textDocumentToBufferId.delete(document);
-            unusedBuffers.push(bufId);
-        });
-        unusedWindows.length && (await actions.lua("close_windows", unusedWindows));
-        unusedBuffers.length && (await actions.lua("delete_buffers", unusedBuffers));
+
+            let isBufValid = true;
+            try {
+                await this.client.request("nvim_buf_delete", [bufId, { force: true }]);
+                isBufValid = await this.client.request("nvim_buf_is_valid", [bufId]);
+            } catch (err) {
+                logger.warn(`Failed to delete buffer ${bufId}: ${err}`);
+            }
+
+            if (!isBufValid) {
+                unusedDocuments.push(document);
+            }
+        }
+
+        for (const doc of unusedDocuments) this.textDocumentToBufferId.delete(doc);
     }
 
-    private async syncVisibleEditors(visibleEditors: TextEditor[]): Promise<void> {
+    private async syncVisibleEditors(visibleEditors: readonly TextEditor[]): Promise<void> {
         // Open/change neovim windows
         for (const editor of visibleEditors) {
             const { document: doc } = editor;
