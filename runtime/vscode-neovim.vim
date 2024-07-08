@@ -122,7 +122,7 @@ endfunction
 
 augroup VscodeGeneral
     autocmd!
-    autocmd BufWinEnter * call VSCodeExtensionNotify('external-buffer', getbufinfo(bufnr())[0], &et, &ts)
+    autocmd BufWinEnter * call VSCodeExtensionNotify('external-buffer', getbufinfo(bufnr())[0], &et, &ts, &buftype)
     autocmd InsertEnter * call <SID>onInsertEnter()
     " Trigger filetype detection
     autocmd BufAdd * do BufRead

@@ -308,7 +308,7 @@ export class BufferManager implements Disposable {
     }
 
     private async handleExternalBuffer(data: EventBusData<"external-buffer">) {
-        const [bufferInfo, expandTab, tabStop] = data;
+        const [bufferInfo, expandTab, tabStop, buftype] = data;
         const {
             name,
             bufnr,
@@ -316,7 +316,15 @@ export class BufferManager implements Disposable {
         } = bufferInfo;
 
         if (!vscode_uri) {
-            logger.debug(`Attaching new external buffer: '${name}', id: ${bufnr}`);
+            // TODO: should we also check for nofile/acwrite here?
+            if (buftype === "help" && name.length === 0) {
+                // workaround https://www.reddit.com/r/neovim/comments/1der6ad/h_emitting_2_bufwinenter_event_instead_of_1/
+                // It might be possible to stop using `BufWinEnter` instead, but that
+                // seems more likely to break something else...
+                return;
+            }
+
+            logger.debug(`Attaching new external buffer: '${name}', id: ${bufnr}, type: '${buftype}'`);
             if (bufnr === 1) {
                 logger.debug(`${bufnr} is the first neovim buffer, skipping`);
                 return;

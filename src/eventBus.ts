@@ -132,7 +132,7 @@ type EventsMapping = {
     // custom
     ["flush-redraw"]: [];
     ["open-file"]: [fileName: string, close: 1 | 0 | "all"];
-    ["external-buffer"]: [info: BufferInfo, expandtab: 1 | 0, tabstop: number];
+    ["external-buffer"]: [info: BufferInfo, expandtab: 1 | 0, tabstop: number, buftype: string];
     ["window-changed"]: [winId: number];
     ["mode-changed"]: [mode: string];
     ["notify-recording"]: undefined;
